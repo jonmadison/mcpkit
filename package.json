@@ -1,0 +1,36 @@
+{
+  "name": "@jonmadison/mcp-kit",
+  "version": "1.0.0",
+  "description": "CLI tool for setting up Model Context Protocol (MCP) servers for Claude",
+  "type": "module",
+  "main": "mcpkit.mjs",
+  "bin": {
+    "mcp-kit": "./mcpkit.mjs"
+  },
+  "dependencies": {
+    "inquirer": "^12.4.1"
+  },
+  "scripts": {
+    "start": "node mcpkit.mjs"
+  },
+  "keywords": [
+    "claude",
+    "mcp",
+    "cli",
+    "model-context-protocol",
+    "ai"
+  ],
+  "author": "Jon Madison",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/jonmadison/mcp-kit.git"
+  },
+  "bugs": {
+    "url": "https://github.com/jonmadison/mcp-kit/issues"
+  },
+  "homepage": "https://github.com/jonmadison/mcp-kit#readme",
+  "engines": {
+    "node": ">=14.0.0"
+  }
+}
