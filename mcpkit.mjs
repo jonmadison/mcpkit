@@ -63,17 +63,23 @@ const serverDescriptions = {
 };
 
 async function main() {
+  // Check for --skip-checks flag
+  const skipChecks = process.argv.includes('--skip-checks');
+
   // Check for Claude installation
-  try {
-    await fs.access(claudeDir);
-  } catch (error) {
-    console.error('Error: Claude desktop application is not installed.');
-    console.error('Please download and install Claude desktop from https://claude.ai/download');
-    process.exit(1);
+  if (!skipChecks) {
+    try {
+      await fs.access(claudeDir);
+    } catch (error) {
+      console.error('Error: Claude desktop application is not installed.');
+      console.error('Please download and install Claude desktop from https://claude.ai/download');
+      process.exit(1);
+    }
   }
 
   // Check for required commands
-  ['git', 'node', 'npm'].forEach(cmd => {
+  if (!skipChecks) {
+    ['git', 'node', 'npm'].forEach(cmd => {
     try {
       execSync(`which ${cmd}`);
     } catch (error) {
@@ -82,6 +88,7 @@ async function main() {
       process.exit(1);
     }
   });
+  }
 
   console.log('Welcome to the Claude MCP Server Configuration Setup! 🚀\n');
 
