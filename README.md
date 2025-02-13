@@ -1,7 +1,6 @@
-
 # MCP Kit
 
-A CLI tool for easily setting up Model Context Protocol (MCP) servers for Claude Desktop. This tool helps you configure and manage multiple MCP servers. I've included some of my favorite servers to start with.
+A CLI tool for easily setting up Model Context Protocol (MCP) servers for Claude Desktop on OSX. This tool helps you configure and manage multiple MCP servers. I've included some of my favorite servers to start with.
 
 Features
 
