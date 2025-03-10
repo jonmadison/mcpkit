@@ -13,6 +13,7 @@ const __dirname = dirname(__filename);
 
 const defaultDir = path.join(os.homedir(), 'src', 'ai_projects');
 const claudeDir = path.join(os.homedir(), 'Library', 'Application Support', 'Claude');
+const configPath = path.join(claudeDir, 'claude_desktop_config.json');
 
 const serverDescriptions = {
   memory: {
@@ -59,14 +60,72 @@ const serverDescriptions = {
       command: 'npx',
       args: ['-y', '@kimtaeyoon83/mcp-server-youtube-transcript']
     }
+  },
+  puppeteer: {
+    name: 'puppeteer',
+    description: 'Browser automation capabilities via Puppeteer',
+    config: {
+      command: 'npx',
+      args: ['-y', '@modelcontextprotocol/server-puppeteer']
+    }
   }
 };
 
+async function openEditor() {
+  const configPath = path.join(claudeDir, 'claude_desktop_config.json');
+  try {
+    await fs.access(configPath);
+    const editor = process.env.EDITOR || process.env.VISUAL;
+    
+    if (editor) {
+      execSync(`${editor} "${configPath}"`, { stdio: 'inherit' });
+    } else {
+      try {
+        execSync(`code "${configPath}"`, { stdio: 'inherit' });
+      } catch {
+        try {
+          execSync(`vim "${configPath}"`, { stdio: 'inherit' });
+        } catch {
+          try {
+            execSync(`nano "${configPath}"`, { stdio: 'inherit' });
+          } catch {
+            console.error('No suitable editor found. Please set your EDITOR environment variable.');
+            process.exit(1);
+          }
+        }
+      }
+    }
+  } catch (error) {
+    if (error.code === 'ENOENT') {
+      console.error(`Config file not found at: ${configPath}`);
+    } else {
+      console.error('Error opening editor:', error.message);
+    }
+    process.exit(1);
+  }
+}
+
+async function getExistingConfig() {
+  const configPath = path.join(claudeDir, 'claude_desktop_config.json');
+  try {
+    const configContent = await fs.readFile(configPath, 'utf8');
+    return JSON.parse(configContent);
+  } catch (error) {
+    if (error.code === 'ENOENT') {
+      return null;
+    }
+    throw error;
+  }
+}
+
 async function main() {
-  // Check for --skip-checks flag
+  if (process.argv.includes('-e')) {
+    await openEditor();
+    return;
+  }
+
   const skipChecks = process.argv.includes('--skip-checks');
 
-  // Check for Claude installation
   if (!skipChecks) {
     try {
       await fs.access(claudeDir);
@@ -77,22 +136,41 @@ async function main() {
     }
   }
 
-  // Check for required commands
   if (!skipChecks) {
     ['git', 'node', 'npm'].forEach(cmd => {
-    try {
-      execSync(`which ${cmd}`);
-    } catch (error) {
-      console.error(`Error: ${cmd} is required but not installed.`);
-      console.error(`Please install ${cmd} and try again.`);
-      process.exit(1);
-    }
-  });
+      try {
+        execSync(`which ${cmd}`);
+      } catch (error) {
+        console.error(`Error: ${cmd} is required but not installed.`);
+        console.error(`Please install ${cmd} and try again.`);
+        process.exit(1);
+      }
+    });
   }
 
   console.log('Welcome to the Claude MCP Server Configuration Setup! 🚀\n');
 
-  // Get directory preference
+  // Get existing configuration
+  const existingConfig = await getExistingConfig();
+  const installedServers = existingConfig?.mcpServers ? Object.keys(existingConfig.mcpServers) : [];
+
+  if (installedServers.length > 0) {
+    console.log('Currently installed servers:');
+    installedServers.forEach(server => {
+      console.log(`✔ ${server}: ${serverDescriptions[server]?.description || 'Custom server'}`);
+    });
+    console.log();
+  }
+
+  // Filter out already installed servers
+  const availableServers = Object.entries(serverDescriptions)
+    .filter(([key]) => !installedServers.includes(key));
+
+  if (availableServers.length === 0) {
+    console.log('All available servers are already installed!');
+    process.exit(0);
+  }
+
   const { useDefaultDir } = await inquirer.prompt([{
     type: 'confirm',
     name: 'useDefaultDir',
@@ -111,23 +189,25 @@ async function main() {
     projectDir = customDir;
   }
 
-  // Select servers to install
   const { selectedServers } = await inquirer.prompt([{
     type: 'checkbox',
     name: 'selectedServers',
-    message: 'Select which MCP servers to install:',
-    choices: Object.entries(serverDescriptions).map(([key, value]) => ({
+    message: 'Select which additional MCP servers to install:',
+    choices: availableServers.map(([key, value]) => ({
       name: `${value.name} - ${value.description}`,
       value: key,
       checked: true
     }))
   }]);
 
-  // Create project directory
+  if (selectedServers.length === 0) {
+    console.log('No new servers selected. Configuration unchanged.');
+    process.exit(0);
+  }
+
   console.log(`\n📁 Creating directory: ${projectDir}`);
   await fs.mkdir(projectDir, { recursive: true });
 
-  // Setup fetch-mcp if selected
   if (selectedServers.includes('fetch')) {
     console.log('\n🔧 Setting up fetch-mcp server...');
     const fetchMcpDir = path.join(projectDir, 'mcp_servers', 'fetch-mcp');
@@ -143,7 +223,6 @@ async function main() {
         cwd: path.join(projectDir, 'mcp_servers'),
         stdio: 'inherit'
       });
-
 
       console.log('Installing dev dependencies...');
       execSync('npm install shx typescript', {
@@ -163,77 +242,45 @@ async function main() {
       console.error('Full error:', error);
     }
   }
+  // Create or update config file
+  let config;
+  try {
+    // Try to read existing config
+    const existingContent = await fs.readFile(configPath, 'utf8');
+    config = JSON.parse(existingContent);
+    console.log('Found existing configuration file');
+  } catch (error) {
+    if (error.code === 'ENOENT') {
+      // File doesn't exist, create new config
+      config = { mcpServers: {} };
+      console.log('Creating new configuration file');
+      // Ensure the Claude directory exists
+      await fs.mkdir(claudeDir, { recursive: true });
+    } else {
+      // Some other error occurred
+      throw error;
+    }
+  }
 
-
-  // Create config file
-  const config = {
-    mcpServers: {}
-  };
-
+  // Add new servers to config
   selectedServers.forEach(server => {
     const serverConfig = serverDescriptions[server].config;
-    // Replace $PROJECT_DIR with actual path
     const configWithPath = JSON.parse(
-      JSON.stringify(serverConfig).replace(/\$PROJECT_DIR/g, projectDir)
+      JSON.stringify(serverConfig).replace(/\$PROJECT_DIR/g, defaultDir)
     );
     config.mcpServers[server] = configWithPath;
   });
 
-  const configPath = path.join(projectDir, 'claude_desktop_config.json');
-  const symlinkPath = path.join(claudeDir, 'claude_desktop_config.json');
-
-  console.log('Checking paths:');
-  console.log('Config path:', configPath);
-  console.log('Symlink path:', symlinkPath);
-
-  // Check if symlink already exists
-  try {
-    const stats = await fs.lstat(symlinkPath);
-    if (stats.isSymbolicLink()) {
-      console.log('Existing symlink found.');
-
-      const { shouldOverwrite } = await inquirer.prompt([{
-        type: 'confirm',
-        name: 'shouldOverwrite',
-        message: 'An existing configuration symlink was found. Do you want to overwrite it?',
-        default: false
-      }]);
-
-      if (!shouldOverwrite) {
-        console.log('Setup cancelled. Existing configuration maintained.');
-        return;
-      }
-
-      // If user confirms, remove the existing symlink
-      await fs.unlink(symlinkPath);
-      console.log('Existing symlink removed.');
-    }
-  } catch (error) {
-    if (error.code !== 'ENOENT') {
-      console.error('Error checking for existing symlink:', error);
-    } else {
-      console.log('No existing symlink found.');
-    }
-  }
-
-
-
-  // Create new symlink
-  console.log('Creating new symlink...');
-  await fs.symlink(configPath, symlinkPath);
-
-  // Write new config file
-  console.log('Writing new config file...');
+  // Write config to file
   await fs.writeFile(configPath, JSON.stringify(config, null, 2));
 
-
-  console.log('\n✨ Claude desktop configuration has been set up successfully!');
-  console.log(`📁 Config file created at: ${configPath}`);
-  console.log(`🔗 Symlink created at: ${symlinkPath}`);
+  console.log('\n✨ Claude desktop configuration has been updated successfully!');
+  console.log(`📁 Config ${config.mcpServers ? 'updated' : 'created'} at: ${configPath}`);
   if (selectedServers.includes('fetch')) {
-    console.log(`🚀 fetch-mcp server installed at: ${path.join(projectDir, 'mcp_servers', 'fetch-mcp')}`);
+    console.log(`🚀 fetch-mcp server installed at: ${path.join(defaultDir, 'mcp_servers', 'fetch-mcp')}`);
   }
   console.log('\nYou\'re all set! You can now use Claude with your selected MCP servers.');
+
 }
 
 main().catch(error => {
